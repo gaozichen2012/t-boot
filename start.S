@@ -1,3 +1,7 @@
+@注意事项
+@1汇编注释用@符号
+@2汇编中不能出现中文空格
+
 .text
 .global _start
 _start:
@@ -10,7 +14,7 @@ _start:
 	ldr pc, _irq
 	ldr pc, _fiq
 	
-
+@以下几组标号_xx的内存单元存放标号xx的地址，目的是为了使用ldr直接让pc指针直接跳转到xx，装载而不是偏移
 _undifined_instruction: .word undifined_instruction
 _software_interrupt: .word software_interrupt
 _prefetch_abort: .word prefetch_abort
@@ -45,6 +49,7 @@ reset:
 	bl disable_watchdog
 	bl disable_interrupt
 	bl disable_mmu
+	bl clock_init
 	bl light_led
 
 set_svc:
@@ -52,36 +57,55 @@ set_svc:
 	bic r0, r0,#0x1f
 	orr r0, r0,#0xd3
 	msr cpsr, r0
-	mov pc, lr
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 
+@不同处理器的看门狗寄存器地址不同，通过查阅芯片手册获取地址
 #define pWTCON 0x53000000
 disable_watchdog:
-	ldr r0, =pWTCON
-	mov r1, #0x0
-	str r1, [r0]
-	mov pc, lr
+	ldr r0,=pWTCON @把看门狗寄存器地址装载到r0中
+	mov r1,#0x0 @将r1赋值0
+	str r1,[r0] @最后用存储器访问指令str将r1中的值放到pWTCON地址的存储器中去
+	mov pc,lr @调用bl必须使用此指令才能返回之前的地址
 
 disable_interrupt:
-	mvn r1, #0x0
+	mvn r1, #0x0 @mvn指令类似于mov，但是是先取反再装载，将0x0取反变成0xff，再将0xff装载到r1中
 	ldr r0, =0x4a000008
-	str r1, [r0]
-	mov pc, lr
+	str r1, [r0] @参考关闭看门狗，将设置值装载到特定地址
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 	
 disable_mmu:
-	mcr p15,0,r0,c7,c7,0
-	mrc p15,0,r0,c1,c0,0
-	bic r0, r0, #0x00000007
+	mcr p15,0,r0,c7,c7,0 @使Icache和Dcache失效，此为固定指令，参考对应芯片手册
+	mrc p15,0,r0,c1,c0,0 @读取控制寄存器，此为固定指令，参考对应芯片手册
+	bic r0, r0, #0x00000007 @将值写入r0
+	mcr p15,0,r0,c1,c0,0 @将r0值写入控制寄存器，此为固定指令，参考对应芯片手册
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
+
+#define CLKDIVN 0x4c000014
+#define MPLLCON 0x4c000008
+#define MPLL_405MHZ	((127<<12)|(2<<4)|(1<<0))
+clock_init:
+@第一步通过HDIVN和PDIVN设置分频系数为1:4:8（参考uboot）
+	ldr r0,=CLKDIVN
+	mov r1,#0x5
+	str r1,[r0]
+@第二步如果FCLK≠HCLK，设置CPU为异步模式（此段代码从芯片手册获取）
 	mcr p15,0,r0,c1,c0,0
-	mov pc, lr
+	orr r0,r0,#0xc0000000
+	mcr p15,0,r0,c1,c0,0
+@第三步配置FCCLK
+	ldr r0,=MPLLCON
+	ldr r1,=MPLL_405MHZ
+	str r1,[r0]
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 
 #define GPBCON 0x56000010
 #define GPBDAT 0x56000014
 light_led:
 	ldr r0, =GPBCON
-	mov r1, #0x400
+	mov r1, #0x15400 @将PB5678设置为输出模式
 	str r1, [r0]
 	
 	ldr r0, =GPBDAT
-	mov r1, #0x0
+	mov r1, #0x0 @将PB56置1
 	str r1, [r0]
-	mov pc, lr
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
