@@ -98,6 +98,35 @@ clock_init:
 	str r1,[r0]
 	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 
+@由于2440的内存控制器有13个，采用一个一个设置，程序太繁琐，所以采用指针指指针的方式，一个指针指向第一个寄存器，另一个指针指向第一个寄存器的赋值，持续赋值直到13个寄存器全都赋值
+#define mem_control 0x48000000
+init_sdram:
+    ldr r0,=mem_control @将r0指向内存控制器寄存器第一个地址
+    add r3,r0,#4*13 @r3指向内存控制器寄存器最后一个地址（第13个）
+    adrl r1,mem_data @将p1指针指向一个内存控制器初始化值的数组
+
+0: @下面这一段程序是一个循环，
+	ldr r2,[r1],#4 @将r1地址中取出数据mem_data放入r2中，然后将指针+4
+	str r2,[r0],#4 @将r0地址中取出寄存器地址数据放入r2中，然后将指针+4
+	cmp r0,r3 @对比r0和r3
+	bne 0b @ne表示不相等，当r0≠r3时，则跳转到0标出，实现循环
+	mov pc,lr 
+
+mem_data:
+	.long 0x22000000
+	.long 0x00000700
+	.long 0x00000700
+	.long 0x00000700
+	.long 0x00000700
+	.long 0x00000700
+	.long 0x00000700
+	.long 0x00018001
+	.long 0x00018001
+	.long 0x008c04f5
+	.long 0x000000b1
+	.long 0x00000030
+	.long 0x00000030
+
 #define GPBCON 0x56000010
 #define GPBDAT 0x56000014
 light_led:
@@ -109,3 +138,4 @@ light_led:
 	mov r1, #0x0 @将PB56置1
 	str r1, [r0]
 	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
+
