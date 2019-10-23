@@ -16,7 +16,7 @@ SECTIONS
         *(.data)
     }
     . = ALIGN(4);
-    bss_sart = .;
+    bss_start = .;
     .bss :
     {
     *(.bss)

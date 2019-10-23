@@ -1,6 +1,7 @@
 @注意事项
 @1汇编注释用@符号
 @2汇编中不能出现中文空格
+@3汇编是个直男，程序是自上而下一行一行运行
 
 .text
 .global _start
@@ -50,7 +51,12 @@ reset:
 	bl disable_interrupt
 	bl disable_mmu
 	bl clock_init
-	bl light_led
+	bl init_sdram
+	bl copy_to_ram
+	bl stack_init
+	bl clean_bss
+	@bl light_led //暂时屏蔽，在main.c中实现点灯
+	ldr pc,=tboot_main @tboot_main是main.c中的函数名，函数名实际上也是地址，将pc指针直接赋值绝对跳转到main函数的位置
 
 set_svc:
 	mrs r0, cpsr
@@ -127,15 +133,50 @@ mem_data:
 	.long 0x00000030
 	.long 0x00000030
 
-#define GPBCON 0x56000010
-#define GPBDAT 0x56000014
-light_led:
-	ldr r0, =GPBCON
-	mov r1, #0x15400 @将PB5678设置为输出模式
-	str r1, [r0]
-	
-	ldr r0, =GPBDAT
-	mov r1, #0x0 @将PB56置1
-	str r1, [r0]
-	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
+@2440/6410/210的内存拷贝都是一模一样的，不同的是拷贝的起点终点不同
+@2440的起点0x00000000,终点是0x30008000
+@6410的起点0x0c000000,终点是0x50008000
+@210 的起点0x00020000,
+copy_to_ram:
+	ldr r0,=0x00000000 @定义拷贝起点的起始地址
+	ldr r1,=0x30008000 @定义拷贝终点的起始地址
+	add r3,r0,#1024*4 @拷贝数据的大小为4k
+
+copy_loop:
+	ldr r2,[r0],#4
+	ldr r2,[r1],#4
+	cmp r0,r3
+	bne copy_loop
+	mov pc,lr 
+
+@初始化栈，栈的起始地址都是内存的起始地址+64M，2440的起始地址0x30000000+0x040000000=0x34000000
+stack_init:
+	ldr sp,=0x34000000 @6410为0x54000000,210为0x24000000
+	mov pc,lr 
+
+@bss段的起始地址和结束地址可以在.lds链接器脚本文件查到
+clean_bss:
+	ldr r0,=bss_start
+	ldr r1,=bss_end
+	cmp r0,r1 @比较r0和r1，如果r0=r1,则bss段数据都为0，则moveq结束此函数运行；如果r0≠r1，则运行clean_loop
+	moveq pc,lr @mov+eq，eq表示equal等于
+
+clean_loop:
+    mov r2, #0
+    str r2, [r0], #4
+    cmp r0, r1
+    bne clean_loop
+    mov pc,lr
+
+@#define GPBCON 0x56000010
+@#define GPBDAT 0x56000014
+@light_led:
+@	ldr r0, =GPBCON
+@	mov r1, #0x15400 @将PB5678设置为输出模式
+@	str r1, [r0]
+@	
+@	ldr r0, =GPBDAT
+@	mov r1, #0x0 @将PB56置1
+@	str r1, [r0]
+@	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 
