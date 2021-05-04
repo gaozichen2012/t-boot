@@ -3,7 +3,6 @@
 
 int tboot_main()
 {
-    *(GPBCON)=0x15400;
-    *(GPBDAT)=0x0;
+    light_led();
     return 0;
 }

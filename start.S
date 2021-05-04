@@ -180,3 +180,15 @@ clean_loop:
 @	str r1, [r0]
 @	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
 
+#define GPBCON 0x56000010
+#define GPBDAT 0x56000014
+.global light_led
+light_led:
+	ldr r0, =GPBCON
+	mov r1, #0x15400 @将PB5678设置为输出模式
+	str r1, [r0]
+	
+	ldr r0, =GPBDAT
+	mov r1, #0x0 @将PB56置1
+	str r1, [r0]
+	mov pc, lr @调用bl必须使用此指令才能返回之前的地址
